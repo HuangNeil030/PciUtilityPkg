@@ -1,0 +1,6 @@
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = PciUtility
+  PACKAGE_GUID                   = 0b997ef3-9af5-4676-bd7d-9bb710d36798
+  PACKAGE_VERSION                = 0.1
+

@@ -1,0 +1,26 @@
+[Defines]
+  INF_VERSION                    = 0x00010019
+  BASE_NAME                      = PciUtility
+  FILE_GUID                      = 19d1f01a-c448-4e87-af26-48aef2fa74f4
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  PciUtility.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  UefiBootServicesTableLib
+  BaseLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  PrintLib
+
+[Protocols]
+  gEfiPciRootBridgeIoProtocolGuid
