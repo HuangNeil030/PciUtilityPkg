@@ -1,5 +1,5 @@
 # PciUtilityPkg
-以下是「PciUtility」這份工具的 **README 筆記版**（以你現在的程式架構為基準：RBIO 掃描 → 清單 UI → Config View → Write/Probe/Unlock）。
+
 
 ---
 
