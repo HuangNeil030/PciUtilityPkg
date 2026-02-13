@@ -1,6 +1,5 @@
 # PciUtilityPkg
 
-
 ---
 
 # PciUtility README（筆記版）
@@ -274,32 +273,6 @@ EFI_STATUS
 
 ---
 
-## 10) 編譯 / 專案配置要點（簡短版）
-
-### 10.1 你的 `.inf` 必須包含
-
-* `ENTRY_POINT = UefiMain`
-* `LibraryClasses`：
-
-  * `UefiLib`
-  * `UefiBootServicesTableLib`
-  * `MemoryAllocationLib`
-  * `BaseLib`
-  * `BaseMemoryLib`
-  * `PrintLib`
-
-### 10.2 你遇到的 `VPrint` 未定義
-
-原因：
-
-* 你用到 `VPrint` 但沒正確宣告/連結它的 library（或 toolchain 把 warning 當 error）
-  解法（你現在版本已採用更穩的方式）：
-* 用 `UnicodeVSPrint + Print("%s")` 取代 VPrint
-
----
-
-
-______________________________________________________________________________________________________________________________________
 cd /d D:\BIOS\MyWorkSpace\edk2
 
 edksetup.bat Rebuild
