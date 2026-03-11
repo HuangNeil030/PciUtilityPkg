@@ -369,67 +369,7 @@ PciUtility (UEFI Application)
 
 ---
 
-# 3) Mermaid 流程圖：完整系統流程（可貼 GitHub README）
-
-> 這張就是你常要的「完整系統流程大圖」
-
-```mermaid
-flowchart TD
-  A[UefiMain()] --> B[InitRbIo: LocateProtocol(PciRootBridgeIo)]
-  B -->|EFI_SUCCESS| C[ScanAllPci]
-  B -->|Error| BERR[Print error & Exit]
-
-  C --> C1[for Bus 0..255]
-  C1 --> C2[for Dev 0..31]
-  C2 --> C3[Read func0 VendorID]
-  C3 -->|VID==0xFFFF| C2
-  C3 -->|Exists| C4[Store func0 entry]
-  C4 --> C5[Read HeaderType (0x0E)]
-  C5 -->|bit7==0| C2
-  C5 -->|bit7==1| C6[Scan func1..7]
-  C6 --> C2
-  C --> D[Device List Loop]
-
-  D --> D1[DrawDeviceList\nVID->VendorName\nClass->ClassName]
-  D1 --> D2{Key?}
-  D2 -->|Up/Down| D3[Update Sel]
-  D2 -->|F1/F2| D4[Update Page/Sel]
-  D2 -->|Enter| E[ConfigViewLoop(B/D/F)]
-  D2 -->|Esc| X[FreePool(List) & Exit]
-  D3 --> D
-  D4 --> D
-
-  E --> E0[ReadConfig256(0x00~0xFF)]
-  E0 --> E1[RenderConfigScreen\nMode=BYTE/WORD/DWORD\nCursor aligned]
-  E1 --> E2{Key?}
-  E2 -->|Arrows| E3[Move Cursor\nStep 1/2/4]
-  E2 -->|Tab| E4[Switch Mode\nAlign Cursor]
-  E2 -->|F9| E5[Toggle DangerousUnlocked]
-  E2 -->|P| E6[ProbeWritableMask\nonly 0x40~0xFF\nOld->~Old->ReadBack->Restore\nMask=Old XOR ReadBack]
-  E2 -->|Enter| E7[DoWriteAtCursor]
-  E2 -->|Esc| D
-  E3 --> E1
-  E4 --> E1
-  E5 --> E1
-  E6 --> E1
-
-  E7 --> E71[GetWritePolicy\nRO/RW1C/BAR/CAP]
-  E71 -->|RO| E72[Blocked: EFI_ACCESS_DENIED]
-  E71 -->|BAR/CAP & Locked| E73[Blocked until F9]
-  E71 -->|Status 0x06| E74[RW1C write ClearMask]
-  E71 -->|Command 0x04| E75[RMW safe bits]
-  E71 -->|Other| E76[Direct write]
-  E74 --> E77[Read-back/Print result]
-  E75 --> E77
-  E76 --> E77
-  E72 --> E77
-  E73 --> E77
-  E77 --> E0
-```
-
----
-
-# 4) Mermaid：主選單 UI 狀態圖（比較像「Menu Flow」）
+# 3) Mermaid：主選單 UI 狀態圖（比較像「Menu Flow」）
 
 ```mermaid
 stateDiagram-v2
