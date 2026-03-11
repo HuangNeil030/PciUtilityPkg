@@ -271,6 +271,195 @@ EFI_STATUS
   * `WritableMask`
 * 讓使用者知道「能寫多少」
 
+下面給你 **PciUtility 的「系統架構」+「主選單流程」+「模組樹狀圖」**（用你目前版本：Device List ↔ Config View，含 Write/Probe/F9 Unlock）。
+
+---
+
+# 1) 模組樹狀圖（Module Tree）
+
+```
+PciUtility (UEFI Application)
+│
+├─ Entry / Init
+│  ├─ UefiMain()
+│  ├─ InitRbIo()                       // LocateProtocol(gEfiPciRootBridgeIoProtocolGuid)
+│  └─ ScanAllPci()                     // 掃描所有 PCI device/function
+│     ├─ ReadPciFuncInfo()             // 讀 VID/DID/Class/ProgIF
+│     └─ (HeaderType bit7)             // 判斷 multi-function
+│
+├─ PCI Access Layer (RBIO Wrappers)
+│  ├─ PciCfgAddr(B,D,F,Reg)            // 組 PCI config address
+│  ├─ PciRead8/16/32()                 // mRbIo->Pci.Read(...)
+│  └─ PciWrite8/16/32()                // mRbIo->Pci.Write(...)
+│
+├─ Console / UI Helpers
+│  ├─ ClearScreen()
+│  ├─ SetAttr()
+│  ├─ PrintAt()                        // UnicodeVSPrint + Print("%s")
+│  ├─ WaitKey()
+│  ├─ IsEsc() / IsEnter() / IsTab()
+│  └─ Cursor Helpers
+│     ├─ AlignCursor()                 // WORD/DWORD 對齊
+│     └─ StepByMode()                  // 1/2/4 bytes
+│
+├─ Name Mapping (人類可讀資訊)
+│  ├─ VendorName(VID)                  // 廠牌名稱 (Intel/AMD/NVIDIA...)
+│  └─ ClassName(Base,Sub,ProgIF)       // 類別/驅動類型 (USB xHCI/NVMe/Host Bridge...)
+│
+├─ Screen: Device List (主選單)
+│  ├─ DrawDeviceList()
+│  ├─ List Key Handling
+│  │  ├─ Up/Down                       // 選擇裝置
+│  │  ├─ F1/F2                         // 翻頁
+│  │  ├─ Enter                         // 進入 Config View
+│  │  └─ Esc                           // Exit
+│  └─ Selection State
+│     ├─ Sel
+│     ├─ PageNo / TopIndex
+│     └─ PageTotal
+│
+└─ Screen: Config View (子選單)
+   ├─ ConfigViewLoop(B,D,F)
+   ├─ ReadConfig256()                  // 讀 0x00~0xFF 到 buffer
+   ├─ RenderConfigScreen()             // BYTE/WORD/DWORD 顯示
+   ├─ DoWriteAtCursor()                // Enter 寫入（含 policy + verify）
+   │  ├─ GetWritePolicy()              // RO/RW1C/BAR/CAP...
+   │  ├─ Command(0x04) RMW             // 保留位元只改安全 bits
+   │  ├─ Status(0x06) RW1C             // ClearMask 寫法
+   │  └─ Read-back verify              // mismatch 提示 masked/ignored
+   ├─ ProbeWritableMaskAtCursor()      // P：探測可寫 mask (0x40~0xFF)
+   └─ Config Key Handling
+      ├─ Arrow Keys                    // 移動 Cursor
+      ├─ Tab                           // 切 Mode
+      ├─ Enter                         // Write
+      ├─ P                             // Probe
+      ├─ F9                            // Dangerous Unlock toggle
+      └─ Esc                           // 回主選單
+```
+
+---
+
+# 2) 主選單流程（System Architecture & Menu Flow）
+
+### 狀態機概念
+
+* **State A：Device List（主選單）**
+* **State B：Config View（子選單）**
+* 兩個狀態靠 `Enter / Esc` 互相切換
+
+---
+
+## 2.1 主流程（文字版）
+
+1. `UefiMain()`
+2. `InitRbIo()` 取得 RBIO
+3. `ScanAllPci()` 建立裝置清單 List[]
+4. 進入 **Device List Loop**
+
+   * 畫清單（含 VendorName / ClassName）
+   * 等按鍵：Up/Down/F1/F2/Enter/Esc
+5. 使用者按 `Enter` → 取選到的 B/D/F → 進入 **ConfigViewLoop(B,D,F)**
+6. ConfigViewLoop：
+
+   * 讀 256 bytes config
+   * 畫 grid（BYTE/WORD/DWORD）
+   * 等按鍵：Arrows/Tab/Enter/P/F9/Esc
+7. 使用者按 `Esc` → 返回 Device List Loop
+8. 使用者在 Device List 按 `Esc` → 結束程式，FreePool(List)
+
+---
+
+# 3) Mermaid 流程圖：完整系統流程（可貼 GitHub README）
+
+> 這張就是你常要的「完整系統流程大圖」
+
+```mermaid
+flowchart TD
+  A[UefiMain()] --> B[InitRbIo: LocateProtocol(PciRootBridgeIo)]
+  B -->|EFI_SUCCESS| C[ScanAllPci]
+  B -->|Error| BERR[Print error & Exit]
+
+  C --> C1[for Bus 0..255]
+  C1 --> C2[for Dev 0..31]
+  C2 --> C3[Read func0 VendorID]
+  C3 -->|VID==0xFFFF| C2
+  C3 -->|Exists| C4[Store func0 entry]
+  C4 --> C5[Read HeaderType (0x0E)]
+  C5 -->|bit7==0| C2
+  C5 -->|bit7==1| C6[Scan func1..7]
+  C6 --> C2
+  C --> D[Device List Loop]
+
+  D --> D1[DrawDeviceList\nVID->VendorName\nClass->ClassName]
+  D1 --> D2{Key?}
+  D2 -->|Up/Down| D3[Update Sel]
+  D2 -->|F1/F2| D4[Update Page/Sel]
+  D2 -->|Enter| E[ConfigViewLoop(B/D/F)]
+  D2 -->|Esc| X[FreePool(List) & Exit]
+  D3 --> D
+  D4 --> D
+
+  E --> E0[ReadConfig256(0x00~0xFF)]
+  E0 --> E1[RenderConfigScreen\nMode=BYTE/WORD/DWORD\nCursor aligned]
+  E1 --> E2{Key?}
+  E2 -->|Arrows| E3[Move Cursor\nStep 1/2/4]
+  E2 -->|Tab| E4[Switch Mode\nAlign Cursor]
+  E2 -->|F9| E5[Toggle DangerousUnlocked]
+  E2 -->|P| E6[ProbeWritableMask\nonly 0x40~0xFF\nOld->~Old->ReadBack->Restore\nMask=Old XOR ReadBack]
+  E2 -->|Enter| E7[DoWriteAtCursor]
+  E2 -->|Esc| D
+  E3 --> E1
+  E4 --> E1
+  E5 --> E1
+  E6 --> E1
+
+  E7 --> E71[GetWritePolicy\nRO/RW1C/BAR/CAP]
+  E71 -->|RO| E72[Blocked: EFI_ACCESS_DENIED]
+  E71 -->|BAR/CAP & Locked| E73[Blocked until F9]
+  E71 -->|Status 0x06| E74[RW1C write ClearMask]
+  E71 -->|Command 0x04| E75[RMW safe bits]
+  E71 -->|Other| E76[Direct write]
+  E74 --> E77[Read-back/Print result]
+  E75 --> E77
+  E76 --> E77
+  E72 --> E77
+  E73 --> E77
+  E77 --> E0
+```
+
+---
+
+# 4) Mermaid：主選單 UI 狀態圖（比較像「Menu Flow」）
+
+```mermaid
+stateDiagram-v2
+  [*] --> DeviceList
+  DeviceList --> ConfigView: Enter (selected B/D/F)
+  ConfigView --> DeviceList: Esc
+  DeviceList --> [*]: Esc
+
+  state DeviceList {
+    [*] --> DrawList
+    DrawList --> WaitKey
+    WaitKey --> DrawList: Up/Down/F1/F2
+    WaitKey --> [*]: Enter
+  }
+
+  state ConfigView {
+    [*] --> RenderGrid
+    RenderGrid --> WaitKey2
+    WaitKey2 --> RenderGrid: Arrows/Tab/F9
+    WaitKey2 --> Probe: P
+    Probe --> RenderGrid
+    WaitKey2 --> Write: Enter
+    Write --> RenderGrid
+    WaitKey2 --> [*]: Esc
+  }
+```
+
+---
+
+
 ---
 
 cd /d D:\BIOS\MyWorkSpace\edk2
